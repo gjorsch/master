@@ -1,4 +1,4 @@
-#libs
+#required packages
 require(raster)
 require(rgdal)
 require(landsat8)
