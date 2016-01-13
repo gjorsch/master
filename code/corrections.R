@@ -11,8 +11,15 @@ setwd("D:/Users/gjors_000/Documents/Masterarbeit/Landsat Corrections")
 
 #Landsat 8 Thermalband
 
-#Load MTL File
+#Load MTL File and DWD Data
 mtl = read.delim("data/LS8/LC81920252015237LGN00/LC81920252015237LGN00_MTL.txt", sep = '=', stringsAsFactors = F)
+dwd = read.delim("data/DWD/produkt_temp_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
+date = toString(mtl[grep("FILE_DATE",mtl$GROUP),]["L1_METADATA_FILE"])
+
+#substring date to match DWD format
+date = gsub("-","",date)
+date = sub("T","",date)
+date = substr(date,2,11)
 
 #Load TIRS files
 ls8band10 = toString(mtl[grep("FILE_NAME_BAND_10",mtl$GROUP),]["L1_METADATA_FILE"])
@@ -44,12 +51,12 @@ K211 = as.numeric(mtl[grep("K2_CONSTANT_BAND_11",mtl$GROUP),]["L1_METADATA_FILE"
 c1 = 14387.7
 C2 = 1.19104*10^8
 
-#effective Wave length for Landsat8 TIRS
+#effective Wavelength for Landsat8 TIRS
 LS8band10lambda = 10.896
 LS8band11lambda = 12.006
 
 #near LST temperature (°C), Water Vapour content and emissitvity (required)
-Tnear = 20
+Tnear = as.numeric(dwd[grep(date,dwd$MESS_DATUM),]["LUFTTEMPERATUR"])
 w = 
 e = 
 #omega coefficients band 10 (model of atmosphere)
