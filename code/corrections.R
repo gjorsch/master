@@ -14,6 +14,7 @@ setwd("D:/Users/gjors_000/Documents/Masterarbeit/Landsat Corrections")
 #Load MTL File and DWD Data
 mtl = read.delim("data/LS8/LC81920252015237LGN00/LC81920252015237LGN00_MTL.txt", sep = '=', stringsAsFactors = F)
 dwd = read.delim("data/DWD/produkt_temp_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
+dwdp = read.delim("data/DWD/pressure/produkt_synop_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
 date = toString(mtl[grep("FILE_DATE",mtl$GROUP),]["L1_METADATA_FILE"])
 
 #substring date to match DWD format
@@ -55,8 +56,19 @@ C2 = 1.19104*10^8
 LS8band10lambda = 10.896
 LS8band11lambda = 12.006
 
-#near LST temperature (°C), Water Vapour content and emissitvity (required)
+#near LST temperature (°C) and relative humidity
 Tnear = as.numeric(dwd[grep(date,dwd$MESS_DATUM),]["LUFTTEMPERATUR"])
+Rhumid = as.numeric(dwd[grep(date,dwd$MESS_DATUM),]["REL_FEUCHTE"])
+Rhumid = Rhumid/100
+
+#air pressure
+p = as.numeric(dwdp[grep(date,dwdp$MESS_DATUM),]["LUFTDRUCK_STATIONSHOEHE"])
+
+#atmospheric water vapour content
+w = Rhumid*((1.0007+(3.46*10^(-6)*p))*(6.1121*exp((17.502*Tnear)/(240.97+Tnear))))
+w = 0.098 * w
+
+
 w = 
 e = 
 #omega coefficients band 10 (model of atmosphere)
