@@ -3,6 +3,8 @@ require(raster)
 require(rgdal)
 require(landsat8)
 require(sp)
+require(rgeos)
+
 
 #set work directory
 setwd("D:/Users/gjors_000/Documents/Masterarbeit/Landsat Corrections")
@@ -12,7 +14,11 @@ setwd("D:/Users/gjors_000/Documents/Masterarbeit/Landsat Corrections")
 #Landsat 8 Thermalband
 
 #Load MTL File and DWD Data
-mtl = read.delim("data/LS8/LC81920252015237LGN00/LC81920252015237LGN00_MTL.txt", sep = '=', stringsAsFactors = F)
+mtlfile = "LC81920252015157LGN00_MTL.txt"
+emissitivityfile= "subset_4_of_LC81920252015157LGN00_reprojected_ndvi.tif"
+LS8file = "Dresden_subsetTIRS.tif"
+
+mtl = read.delim(paste0("data/LS8/",mtlfile), sep = '=', stringsAsFactors = F)
 dwd = read.delim("data/DWD/produkt_temp_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
 dwdp = read.delim("data/DWD/pressure/produkt_synop_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
 date = toString(mtl[grep("FILE_DATE",mtl$GROUP),]["L1_METADATA_FILE"])
@@ -23,16 +29,11 @@ date = sub("T","",date)
 date = substr(date,2,11)
 
 #Load TIRS files
-ls8band10 = toString(mtl[grep("FILE_NAME_BAND_10",mtl$GROUP),]["L1_METADATA_FILE"])
-ls8band11 = toString(mtl[grep("FILE_NAME_BAND_11",mtl$GROUP),]["L1_METADATA_FILE"])
+ls8band10 = readGDAL(paste("data/LS8/",LS8file, sep=""),band=1)
+ls8band11 = readGDAL(paste("data/LS8/",LS8file, sep=""),band=2)
 
-ls8band10 = substr(ls8band10, 2, nchar(ls8band10))
-ls8band11 = substr(ls8band11, 2, nchar(ls8band11))
-
-ls8band10 = readGDAL(paste("data/LS8/LC81920252015237LGN00/",ls8band10, sep=""))
-ls8band11 = readGDAL(paste("data/LS8/LC81920252015237LGN00/",ls8band11, sep=""))
-ls8band10test = raster("data/LS8/LC81920252015237LGN00/LC81920252015237LGN00_B10.TIF")
-#Load temperature conversion variables
+#Load emmissitivity file
+ls8emiss = readGDAL(paste("data/LS8/",emissitivityfile, sep=""),band=6)
 
 #band specific multiplicative rescaling factor
 Ml10 = as.numeric(mtl[grep("RADIANCE_MULT_BAND_10",mtl$GROUP),]["L1_METADATA_FILE"])
@@ -49,7 +50,7 @@ K210 = as.numeric(mtl[grep("K2_CONSTANT_BAND_10",mtl$GROUP),]["L1_METADATA_FILE"
 K211 = as.numeric(mtl[grep("K2_CONSTANT_BAND_11",mtl$GROUP),]["L1_METADATA_FILE"])
 
 #Radiance transfer coeficients
-c1 = 14387.7
+C1 = 14387.7
 C2 = 1.19104*10^8
 
 #effective Wavelength for Landsat8 TIRS
@@ -69,8 +70,6 @@ w = Rhumid*((1.0007+(3.46*10^(-6)*p))*(6.1121*exp((17.502*Tnear)/(240.97+Tnear))
 w = 0.098 * w
 
 
-w = 
-e = 
 #omega coefficients band 10 (model of atmosphere)
 omega1_10 <- function(x){
   y = (0.0109*x^3)+(0.0079*x^2)+(0.0991*x)+1.0090
@@ -101,7 +100,8 @@ omega3_11 <- function(x){
 
 #correction functions (part of main function)
 gamma <- function(x,lambda,T){
-  y = ((C1*x)/(T*T))*((((lambda^4)/C2)+x)+lambda^(-1))
+  y = ((C1*x)/(T*T))*((((lambda^4)/C2)*x)+lambda^(-1))
+  y = 1/y
   return(y)
 }
 delta <- function(x,lambda,T){
@@ -114,6 +114,18 @@ corr <- function(x,lambda,T){
   return(y)
 }
 
+#LST for Band 10
+LS8LST <- function(x,lambda,T,e,w){
+  y = (gamma(x,lambda,T)*((1/e)*((omega1_10(w)*x)+omega2_10(w))+omega3_10(w)))+delta(x,lambda,T)
+  return(y)
+}
+
 #Conversion to At Satellite Brightness Temperature
 BTls8band10=tempconv(ls8band10,Ml10,Al10,K110,K210)
 BTls8band11=tempconv(ls8band11,Ml11,Al11,K111,K211)
+
+#finally calculate band 10 LST spatial frame
+LST = LS8LST(BTls8band10@data,LS8band10lambda,Tnear,ls8emiss@data,w)
+LST_plot = BTls8band10
+LST_plot@data = LST
+writeGDAL(LST_plot, "out.tif")
