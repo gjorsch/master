@@ -15,8 +15,9 @@ setwd("D:/Users/gjors_000/Documents/Masterarbeit/Landsat Corrections")
 
 #Load MTL File and DWD Data
 mtlfile = "LC81920252015157LGN00_MTL.txt"
-emissitivityfile= "subset_4_of_LC81920252015157LGN00_reprojected_ndvi.tif"
-LS8file = "Dresden_subsetTIRS.tif"
+emissitivityfile= "emiss_ETRS_align_clip_GRASS.tif"
+LS8fileband10 = "LS8b10_ETRS_align_clip_GRASS.tif"
+LS8fileband11 = "Band11_ETRS_align_clip.tif"
 
 mtl = read.delim(paste0("data/LS8/",mtlfile), sep = '=', stringsAsFactors = F)
 dwd = read.delim("data/DWD/produkt_temp_Terminwerte_20140712_20160112_01048.txt", sep = ';', stringsAsFactors = F)
@@ -29,11 +30,11 @@ date = sub("T","",date)
 date = substr(date,2,11)
 
 #Load TIRS files
-ls8band10 = readGDAL(paste("data/LS8/",LS8file, sep=""),band=1)
-ls8band11 = readGDAL(paste("data/LS8/",LS8file, sep=""),band=2)
+ls8band10 = readGDAL(paste("data/LS8/",LS8fileband10, sep=""),band=1)
+ls8band11 = readGDAL(paste("data/LS8/",LS8fileband11, sep=""),band=1)
 
 #Load emmissitivity file
-ls8emiss = readGDAL(paste("data/LS8/",emissitivityfile, sep=""),band=6)
+ls8emiss = readGDAL(paste("data/LS8/",emissitivityfile, sep=""),band=1)
 
 #band specific multiplicative rescaling factor
 Ml10 = as.numeric(mtl[grep("RADIANCE_MULT_BAND_10",mtl$GROUP),]["L1_METADATA_FILE"])
@@ -68,7 +69,6 @@ p = as.numeric(dwdp[grep(date,dwdp$MESS_DATUM),]["LUFTDRUCK_STATIONSHOEHE"])
 #atmospheric water vapour content
 w = Rhumid*((1.0007+(3.46*10^(-6)*p))*(6.1121*exp((17.502*Tnear)/(240.97+Tnear))))
 w = 0.098 * w
-
 
 #omega coefficients band 10 (model of atmosphere)
 omega1_10 <- function(x){
@@ -124,8 +124,33 @@ LS8LST <- function(x,lambda,T,e,w){
 BTls8band10=tempconv(ls8band10,Ml10,Al10,K110,K210)
 BTls8band11=tempconv(ls8band11,Ml11,Al11,K111,K211)
 
+#Jimenez et al, 2003
 #finally calculate band 10 LST spatial frame
 LST = LS8LST(BTls8band10@data,LS8band10lambda,Tnear,ls8emiss@data,w)
 LST_plot = BTls8band10
 LST_plot@data = LST
-writeGDAL(LST_plot, "out.tif")
+
+#buggy due to little LST differences ~0.01°C
+#check units!?
+#writeGDAL(LST_plot, "outLST_LS8b10.tif")
+plot(raster(LST_plot))
+
+#Alternate calc
+#Weng et al, 2003
+
+BTls8band10alt = BTls8band10
+BTls8band10alt@data =BTls8band10alt@data - 273.15
+BTls8band11alt = BTls8band11
+BTls8band11alt@data =BTls8band11alt@data - 273.15
+
+LSTband10alt  = BTls8band10alt
+LSTband10alt@data = BTls8band10alt@data/1+ls8band10@data*(BTls8band10alt@data/14380)*log(ls8emiss@data)
+writeGDAL(LSTband10alt, "out_alt_LST_LS8b10.tif")
+
+LSTband11alt  = BTls8band11alt
+LSTband11alt@data = BTls8band11alt@data/1+ls8band11@data*(BTls8band11alt@data/14380)*log(ls8emiss@data)
+writeGDAL(LSTband11alt, "out_alt_LST_LS8b11.tif")
+
+LST_alt_av = LSTband10alt
+LST_alt_av@data = (LSTband10alt@data+LSTband11alt@data)/2
+writeGDAL(LST_alt, "out_alt_LST_LS8av.tif")
